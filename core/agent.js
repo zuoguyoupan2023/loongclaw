@@ -137,10 +137,11 @@ class Agent {
       // 处理工具调用
       if (response.tool_calls && response.tool_calls.length > 0) {
         const toolResults = [];
+        const toolCalls = this._normalizeToolCalls(response.tool_calls);
         
-        for (const toolCall of response.tool_calls) {
+        for (const toolCall of toolCalls) {
           const toolName = toolCall.function.name;
-          const toolArgs = JSON.parse(toolCall.function.arguments);
+          const toolArgs = this._parseToolArguments(toolCall.function.arguments);
           
           try {
             const result = await this.tools.call(toolName, toolArgs);
@@ -166,7 +167,7 @@ class Agent {
             { role: 'system', content: this.systemPrompt },
             ...context,
             ...session.messages,
-            { role: 'assistant', content: response.content, tool_calls: response.tool_calls },
+            { role: 'assistant', content: response.content, tool_calls: toolCalls },
             ...toolResults
           ]
         );
@@ -229,10 +230,11 @@ class Agent {
     
     if (response.tool_calls && response.tool_calls.length > 0) {
       const toolResults = [];
+      const toolCalls = this._normalizeToolCalls(response.tool_calls);
       
-      for (const toolCall of response.tool_calls) {
+      for (const toolCall of toolCalls) {
         const toolName = toolCall.function.name;
-        const toolArgs = JSON.parse(toolCall.function.arguments);
+        const toolArgs = this._parseToolArguments(toolCall.function.arguments);
         
         try {
           const result = await this.tools.call(toolName, toolArgs);
@@ -257,7 +259,7 @@ class Agent {
           { role: 'system', content: this.systemPrompt },
           ...context,
           ...session.messages,
-          { role: 'assistant', content: response.content, tool_calls: response.tool_calls },
+          { role: 'assistant', content: response.content, tool_calls: toolCalls },
           ...toolResults
         ]
       );
@@ -302,6 +304,41 @@ class Agent {
     } else {
       this.sessions.delete(sessionId);
     }
+  }
+
+  _parseToolArguments(rawArgs) {
+    if (!rawArgs) {
+      return {};
+    }
+    if (typeof rawArgs === 'object') {
+      return rawArgs;
+    }
+    if (typeof rawArgs !== 'string') {
+      return {};
+    }
+    const trimmed = rawArgs.trim();
+    if (!trimmed) {
+      return {};
+    }
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      return {};
+    }
+  }
+
+  _normalizeToolCalls(toolCalls) {
+    return toolCalls.map((toolCall, index) => {
+      const id = toolCall.id || toolCall.tool_call_id || `tool_call_${Date.now()}_${index}`;
+      return {
+        ...toolCall,
+        id,
+        function: {
+          ...toolCall.function,
+          arguments: toolCall.function?.arguments ?? ''
+        }
+      };
+    });
   }
 
   /**
