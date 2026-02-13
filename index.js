@@ -26,7 +26,7 @@ async function main() {
           ? process.env.GLM_API_KEY
           : (process.env.DEEPSEEK_API_KEY || process.env.GLM_API_KEY),
         apiUrl: process.env.LLM_PROVIDER === 'glm'
-          ? (process.env.GLM_API_URL || 'https://open.bigmodel.cn/api/anthropic')
+          ? (process.env.GLM_API_URL || ' https://open.bigmodel.cn/api/coding/paas/v4')
           : (process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions'),
         format: process.env.LLM_FORMAT || (process.env.LLM_PROVIDER === 'glm' ? null : 'openai'),
         model: process.env.LLM_PROVIDER === 'glm'

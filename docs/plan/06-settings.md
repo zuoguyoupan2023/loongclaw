@@ -35,7 +35,7 @@ DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions
 LLM_PROVIDER=glm
 GLM_API_KEY=your_key
 GLM_MODEL=glm-5,glm-4.7
-GLM_API_URL=https://open.bigmodel.cn/api/anthropic
+GLM_API_URL= https://open.bigmodel.cn/api/coding/paas/v4
 
 LLM_PROVIDER=kimi
 KIMI_API_KEY=your_key

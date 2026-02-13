@@ -38,7 +38,7 @@ class LLMAdapter {
   constructor(config) {
     this.provider = config.provider || 'glm';
     this.apiKey = config.apiKey || process.env.GLM_API_KEY;
-    this.apiUrl = config.apiUrl || process.env.GLM_API_URL || 'https://open.bigmodel.cn/api/anthropic';
+    this.apiUrl = config.apiUrl || process.env.GLM_API_URL || ' https://open.bigmodel.cn/api/coding/paas/v4';
     this.format = config.format || process.env.LLM_FORMAT || null;
     const modelConfig = config.model || process.env.GLM_MODEL;
     const parsedModels = Array.isArray(modelConfig)

@@ -92,7 +92,7 @@ function buildAgentConfig(overrides = {}) {
       ? process.env.KIMI_API_KEY
       : (process.env.DEEPSEEK_API_KEY || process.env.GLM_API_KEY)));
   const apiUrl = overrides.llm?.apiUrl || (provider === 'glm'
-    ? (process.env.GLM_API_URL || 'https://open.bigmodel.cn/api/anthropic')
+    ? (process.env.GLM_API_URL || ' https://open.bigmodel.cn/api/coding/paas/v4')
     : (provider === 'kimi'
       ? (process.env.KIMI_API_URL || 'https://api.moonshot.cn/v1/chat/completions')
       : (process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions')));
