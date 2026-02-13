@@ -208,6 +208,11 @@ function t(lang, key, data = {}) {
   return template.replace(/\{(\w+)\}/g, (_, name) => (data[name] ?? ''));
 }
 
+function formatLanguageDisplay(lang) {
+  const normalized = resolveLanguage(lang);
+  return normalized === 'zh' ? '汉' : 'en';
+}
+
 function cloneSessionHistory(sourceAgent, targetAgent, sessionId) {
   const history = sourceAgent.getHistory(sessionId);
   if (history.length === 0) {
@@ -325,13 +330,14 @@ async function handleSlashCommand(input, agent, state, options) {
   if (effectiveCommand === 'lang') {
     const status = formatModelStatus(state.config);
     const lang = status.language;
+    const langDisplay = formatLanguageDisplay(lang);
     if (args.length === 0) {
       const lines = [
-        `${t(lang, 'langCurrent')}: ${lang}`,
+        `${t(lang, 'langCurrent')}: ${langDisplay}`,
         `${t(lang, 'langUsage')}:`,
         '/lang en',
         '/lang zh',
-        `${t(lang, 'langOptions')}: en | zh`,
+        `${t(lang, 'langOptions')}: en | zh (en | 汉)`,
         t(lang, 'langInputHint')
       ];
       outputText(lines.join('\n'), options);
@@ -357,8 +363,9 @@ async function handleSlashCommand(input, agent, state, options) {
     const nextAgent = await createAgent(nextConfig);
     cloneSessionHistory(agent, nextAgent, state.sessionId);
     state.config = nextConfig;
+    const nextDisplay = formatLanguageDisplay(nextLang);
     const lines = [
-      `${t(nextLang, 'langChanged')}: ${nextLang}`
+      `${t(nextLang, 'langChanged')}: ${nextDisplay}`
     ];
     outputText(lines.join('\n'), options);
     if (!supported.includes(raw)) {
