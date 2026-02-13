@@ -21,7 +21,7 @@ class AgentConfig {
       provider: config.llm?.provider || 'glm',
       apiKey: config.llm?.apiKey || process.env.GLM_API_KEY,
       apiUrl: config.llm?.apiUrl,
-      model: config.llm?.model || 'glm-4-plus'
+      model: config.llm?.model
     };
     
     this.memory = {
