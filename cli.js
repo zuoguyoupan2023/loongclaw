@@ -8,7 +8,16 @@ import { mkdir } from 'fs/promises';
 config();
 
 function parseArgs(argv) {
-  const args = { repl: false, sessionId: 'default', json: false, noTools: false, listPath: null };
+  const args = {
+    repl: false,
+    sessionId: 'default',
+    json: false,
+    noTools: false,
+    listPath: null,
+    readPath: null,
+    writePath: null,
+    writeContent: null
+  };
   const rest = [];
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -21,6 +30,13 @@ function parseArgs(argv) {
     } else if (arg === '--list') {
       args.listPath = argv[i + 1] || '.';
       i += 1;
+    } else if (arg === '--read') {
+      args.readPath = argv[i + 1] || '';
+      i += 1;
+    } else if (arg === '--write') {
+      args.writePath = argv[i + 1] || '';
+      args.writeContent = argv[i + 2] || '';
+      i += 2;
     } else if (arg === '--session') {
       args.sessionId = argv[i + 1] || 'default';
       i += 1;
@@ -107,10 +123,58 @@ async function runList(listPath, options) {
   }
 }
 
+async function runRead(readPath, options) {
+  const workspaceDir = './workspace';
+  if (!existsSync(workspaceDir)) {
+    await mkdir(workspaceDir, { recursive: true });
+  }
+  if (!readPath) {
+    process.stderr.write('缺少文件路径：--read <path>\n');
+    process.exit(1);
+  }
+  const tools = createToolManager();
+  const result = await tools.call('read_file', { path: readPath });
+  if (options.json) {
+    process.stdout.write(JSON.stringify({ content: result }) + '\n');
+    return;
+  }
+  process.stdout.write(`${String(result)}\n`);
+}
+
+async function runWrite(writePath, writeContent, options) {
+  const workspaceDir = './workspace';
+  if (!existsSync(workspaceDir)) {
+    await mkdir(workspaceDir, { recursive: true });
+  }
+  if (!writePath) {
+    process.stderr.write('缺少文件路径：--write <path> <content>\n');
+    process.exit(1);
+  }
+  const tools = createToolManager();
+  const result = await tools.call('write_file', { path: writePath, content: writeContent || '' });
+  if (options.json) {
+    process.stdout.write(JSON.stringify(result) + '\n');
+    return;
+  }
+  if (result?.success) {
+    process.stdout.write(`写入成功：${result.path}\n`);
+  } else {
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+  }
+}
+
 async function main() {
   const { args, message } = parseArgs(process.argv.slice(2));
   if (args.listPath) {
     await runList(args.listPath, args);
+    return;
+  }
+  if (args.readPath !== null) {
+    await runRead(args.readPath, args);
+    return;
+  }
+  if (args.writePath !== null) {
+    await runWrite(args.writePath, args.writeContent, args);
     return;
   }
   const agent = await createAgent(buildAgentConfig());
