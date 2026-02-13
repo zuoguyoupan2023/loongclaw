@@ -39,6 +39,7 @@ class LLMAdapter {
     this.provider = config.provider || 'glm';
     this.apiKey = config.apiKey || process.env.GLM_API_KEY;
     this.apiUrl = config.apiUrl || process.env.GLM_API_URL || 'https://open.bigmodel.cn/api/anthropic';
+    this.format = config.format || process.env.LLM_FORMAT || null;
     const modelConfig = config.model || process.env.GLM_MODEL;
     const parsedModels = Array.isArray(modelConfig)
       ? modelConfig
@@ -88,7 +89,7 @@ class LLMAdapter {
         const response = await this.client.post(requestPath, requestBody);
         return isAnthropic ? this._parseAnthropicResponse(response.data) : this._parseResponse(response.data);
       } catch (error) {
-        throw this._normalizeError(error);
+        throw await this._normalizeErrorAsync(error);
       }
     });
   }
@@ -115,7 +116,7 @@ class LLMAdapter {
           ? this._handleAnthropicStream(response, onChunk)
           : this._handleOpenAIStream(response, onChunk);
       } catch (error) {
-        throw this._normalizeError(error);
+        throw await this._normalizeErrorAsync(error);
       }
     });
   }
@@ -149,18 +150,23 @@ class LLMAdapter {
         };
       });
     }
-    return tools.map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters || {
-          type: 'object',
-          properties: {},
-          required: []
-        }
+    return tools.map(tool => {
+      if (tool.type === 'function' && tool.function) {
+        return tool;
       }
-    }));
+      return {
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters || {
+            type: 'object',
+            properties: {},
+            required: []
+          }
+        }
+      };
+    });
   }
 
   /**
@@ -223,6 +229,7 @@ class LLMAdapter {
 
     if (tools && tools.length > 0) {
       requestBody.tools = this._formatTools(tools);
+      requestBody.tool_choice = options.toolChoice || 'auto';
     }
     return requestBody;
   }
@@ -394,14 +401,16 @@ class LLMAdapter {
   }
 
   _isAnthropic() {
+    if (this.format) {
+      return this.format === 'anthropic';
+    }
     return this.apiUrl.includes('/api/anthropic');
   }
 
-  _normalizeError(error) {
+  async _normalizeErrorAsync(error) {
     if (error.response) {
-      return new Error(
-        `LLM API 错误: ${error.response.status} - ${JSON.stringify(error.response.data)}`
-      );
+      const responseData = await this._safeStringifyAsync(error.response.data);
+      return new Error(`LLM API 错误: ${error.response.status} - ${responseData}`);
     }
     if (error.request) {
       return new Error(`LLM API 请求失败: ${error.message}`);
@@ -426,7 +435,7 @@ class LLMAdapter {
 
   _shouldFallback(error) {
     const status = error.response?.status;
-    const message = error.response?.data ? JSON.stringify(error.response.data) : error.message || '';
+    const message = error.response?.data ? this._safeStringify(error.response.data) : error.message || '';
     if (status === 404) {
       return true;
     }
@@ -434,6 +443,61 @@ class LLMAdapter {
       return true;
     }
     return false;
+  }
+
+  _safeStringify(data) {
+    if (data === null || data === undefined) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      return data;
+    }
+    if (Buffer.isBuffer(data)) {
+      return data.toString('utf-8');
+    }
+    if (typeof data?.pipe === 'function') {
+      return '[stream]';
+    }
+    try {
+      return JSON.stringify(data);
+    } catch (error) {
+      return '[unserializable]';
+    }
+  }
+
+  async _safeStringifyAsync(data) {
+    if (data === null || data === undefined) {
+      return '';
+    }
+    if (typeof data === 'string') {
+      return data;
+    }
+    if (Buffer.isBuffer(data)) {
+      return data.toString('utf-8');
+    }
+    if (typeof data?.on === 'function') {
+      const raw = await this._readStream(data);
+      if (raw) {
+        return raw;
+      }
+      return '[stream]';
+    }
+    try {
+      return JSON.stringify(data);
+    } catch (error) {
+      return '[unserializable]';
+    }
+  }
+
+  _readStream(stream) {
+    return new Promise((resolve) => {
+      let raw = '';
+      stream.on('data', chunk => {
+        raw += chunk.toString('utf-8');
+      });
+      stream.on('end', () => resolve(raw));
+      stream.on('error', () => resolve(raw));
+    });
   }
 
   /**
@@ -472,6 +536,7 @@ export function createDeepSeekAdapter(config) {
   return new LLMAdapter({
     provider: 'deepseek',
     apiUrl: 'https://api.deepseek.com/v1/chat/completions',
+    format: 'openai',
     model: 'deepseek-chat',
     ...config
   });
