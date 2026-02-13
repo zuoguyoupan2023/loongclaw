@@ -372,8 +372,7 @@
     </div>
 
     <script>
-        // 配置
-        const WS_URL = `ws://${window.location.hostname}:3001`;
+        let wsUrl = null;
         let ws = null;
         let sessionId = 'default';
 
@@ -391,7 +390,7 @@
 
         // 连接 WebSocket
         function connect() {
-            ws = new WebSocket(WS_URL);
+            ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
                 statusIndicator.classList.add('connected');
@@ -600,8 +599,29 @@
             messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
         });
 
-        // 启动连接
-        connect();
+        async function initWebSocket() {
+            const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            const host = window.location.hostname;
+
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    const port = config.wsPort ? `:${config.wsPort}` : '';
+                    wsUrl = `${scheme}://${host}${port}`;
+                }
+            } catch (error) {
+            }
+
+            if (!wsUrl) {
+                const port = window.location.port || '3001';
+                wsUrl = `${scheme}://${host}${port ? `:${port}` : ''}`;
+            }
+
+            connect();
+        }
+
+        initWebSocket();
     </script>
 </body>
 </html>
