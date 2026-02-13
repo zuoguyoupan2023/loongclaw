@@ -44,13 +44,13 @@ class Tool {
    * @param {Object} args - 参数对象
    * @returns {Promise<any>} 执行结果
    */
-  async execute(args) {
+  async execute(args, manager) {
     try {
       // 验证参数
       this._validateParameters(args);
       
       // 执行处理函数
-      return await this.handler(args);
+      return await this.handler(args, manager);
       
     } catch (error) {
       throw new Error(`工具 "${this.name}" 执行失败: ${error.message}`);
@@ -167,7 +167,7 @@ class ToolManager {
       throw new Error(`工具不存在: ${name}`);
     }
     
-    return await tool.execute(args);
+    return await tool.execute(args, this);
   }
 
   /**
