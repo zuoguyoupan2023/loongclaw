@@ -226,12 +226,36 @@ async function handleSlashCommand(input, agent, state, options) {
     return { handled: false, agent };
   }
   const parts = trimmed.slice(1).trim().split(/\s+/).filter(Boolean);
-  const command = (parts[0] || '').toLowerCase();
+  const rawCommand = parts[0] || '';
+  const command = rawCommand.toLowerCase();
   const args = parts.slice(1);
   if (!command) {
     return { handled: true, agent };
   }
-  if (command === 'models') {
+  const langAliasMap = new Map([
+    ['language', 'lang'],
+    ['语言', 'lang'],
+    ['lang', 'lang'],
+    ['zh', 'lang'],
+    ['中文', 'lang'],
+    ['cn', 'lang'],
+    ['zh-cn', 'lang'],
+    ['en', 'lang'],
+    ['english', 'lang'],
+    ['英文', 'lang'],
+    ['en-us', 'lang']
+  ]);
+  const alias = langAliasMap.get(command);
+  if (alias === 'lang' && command !== 'lang') {
+    parts.shift();
+    if (['zh', '中文', 'cn', 'zh-cn'].includes(command)) {
+      args.unshift('zh');
+    } else if (['en', 'english', '英文', 'en-us'].includes(command)) {
+      args.unshift('en');
+    }
+  }
+  const effectiveCommand = alias || command;
+  if (effectiveCommand === 'models') {
     const targetProvider = args[0] || state.config.llm.provider;
     const models = getAvailableModels(targetProvider);
     const status = formatModelStatus(state.config);
@@ -245,7 +269,7 @@ async function handleSlashCommand(input, agent, state, options) {
     outputText(lines.join('\n'), options);
     return { handled: true, agent };
   }
-  if (command === 'model') {
+  if (effectiveCommand === 'model') {
     const status = formatModelStatus(state.config);
     const lang = status.language;
     if (args.length === 0) {
@@ -298,7 +322,7 @@ async function handleSlashCommand(input, agent, state, options) {
     outputText(lines.join('\n'), options);
     return { handled: true, agent: nextAgent };
   }
-  if (command === 'lang') {
+  if (effectiveCommand === 'lang') {
     const status = formatModelStatus(state.config);
     const lang = status.language;
     if (args.length === 0) {
@@ -342,7 +366,7 @@ async function handleSlashCommand(input, agent, state, options) {
     }
     return { handled: true, agent: nextAgent };
   }
-  if (command === 'help') {
+  if (effectiveCommand === 'help') {
     const status = formatModelStatus(state.config);
     const lang = status.language;
     const lines = [
@@ -350,7 +374,13 @@ async function handleSlashCommand(input, agent, state, options) {
       '/model <provider> [model]',
       '/model <model>',
       '/models [provider]',
-      '/lang en|zh'
+      '/lang en|zh',
+      '/language en|zh',
+      '/zh',
+      '/en',
+      '/中文',
+      '/英文',
+      '/语言'
     ];
     outputText(lines.join('\n'), options);
     return { handled: true, agent };
