@@ -70,34 +70,88 @@ function resolveLanguage(input) {
   return 'en';
 }
 
+function normalizeProvider(input) {
+  const value = (input || '').toLowerCase();
+  if (value === 'chatglm') {
+    return 'glm';
+  }
+  return value;
+}
+
+function normalizeGlmModel(input) {
+  const value = String(input || '').trim();
+  const lowered = value.toLowerCase();
+  if (lowered === 'glm4.7' || lowered === 'glm-4.7' || lowered === 'chatglm-4.7') {
+    return 'glm-4.7';
+  }
+  if (lowered === 'glm5' || lowered === 'glm-5' || lowered === 'chatglm-5') {
+    return 'glm-5';
+  }
+  return value;
+}
+
+function normalizeGlmApiUrl(input) {
+  const value = String(input || '').trim();
+  if (!value) {
+    return value;
+  }
+  if (value.endsWith('/chat/completions')) {
+    return value;
+  }
+  if (value.endsWith('/api/paas/v4') || value.endsWith('/api/paas/v4/')) {
+    return value.replace(/\/$/, '') + '/chat/completions';
+  }
+  if (value.endsWith('/api/coding/paas/v4') || value.endsWith('/api/coding/paas/v4/')) {
+    return value.replace(/\/$/, '') + '/chat/completions';
+  }
+  return value;
+}
+
+function formatProviderDisplay(provider) {
+  if (provider === 'glm') {
+    return 'chatglm';
+  }
+  return provider;
+}
+
 function getDefaultLanguage() {
   return resolveLanguage(process.env.CLI_LANG || process.env.LOONGCLAW_LANG);
 }
 
 function getDefaultModels(provider) {
-  if (provider === 'glm') {
+  const normalized = normalizeProvider(provider);
+  if (normalized === 'glm') {
     return normalizeModelList(process.env.GLM_MODEL, ['glm-5', 'glm-4.7']);
   }
-  if (provider === 'kimi') {
+  if (normalized === 'kimi') {
     return normalizeModelList(process.env.KIMI_MODEL, ['moonshot-v1-8k']);
   }
   return normalizeModelList(process.env.DEEPSEEK_MODEL, ['deepseek-chat']);
 }
 
 function buildAgentConfig(overrides = {}) {
-  const provider = overrides.llm?.provider || process.env.LLM_PROVIDER || 'deepseek';
+  const rawProvider = overrides.llm?.provider || process.env.LLM_PROVIDER || 'deepseek';
+  const provider = normalizeProvider(rawProvider);
   const apiKey = overrides.llm?.apiKey || (provider === 'glm'
     ? process.env.GLM_API_KEY
     : (provider === 'kimi'
       ? process.env.KIMI_API_KEY
       : (process.env.DEEPSEEK_API_KEY || process.env.GLM_API_KEY)));
-  const apiUrl = overrides.llm?.apiUrl || (provider === 'glm'
-    ? (process.env.GLM_API_URL || ' https://open.bigmodel.cn/api/coding/paas/v4')
+  const rawApiUrl = overrides.llm?.apiUrl || (provider === 'glm'
+    ? (process.env.GLM_API_URL || 'https://open.bigmodel.cn/api/paas/v4/chat/completions')
     : (provider === 'kimi'
       ? (process.env.KIMI_API_URL || 'https://api.moonshot.cn/v1/chat/completions')
       : (process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions')));
+  const apiUrl = provider === 'glm' ? normalizeGlmApiUrl(rawApiUrl) : String(rawApiUrl || '').trim();
   const defaultModels = getDefaultModels(provider);
-  const model = overrides.llm?.model ?? (provider === 'glm' ? defaultModels : defaultModels[0]);
+  let model = overrides.llm?.model ?? (provider === 'glm' ? defaultModels : defaultModels[0]);
+  if (provider === 'glm') {
+    if (Array.isArray(model)) {
+      model = model.map(item => normalizeGlmModel(item));
+    } else if (typeof model === 'string') {
+      model = normalizeGlmModel(model);
+    }
+  }
   const language = resolveLanguage(overrides.system?.language || getDefaultLanguage());
   return {
     llm: {
@@ -261,14 +315,14 @@ async function handleSlashCommand(input, agent, state, options) {
   }
   const effectiveCommand = alias || command;
   if (effectiveCommand === 'models') {
-    const targetProvider = args[0] || state.config.llm.provider;
+    const targetProvider = normalizeProvider(args[0] || state.config.llm.provider);
     const models = getAvailableModels(targetProvider);
     const status = formatModelStatus(state.config);
     const lang = status.language;
     const lines = [
-      `${t(lang, 'currentProvider')}: ${status.provider}`,
+      `${t(lang, 'currentProvider')}: ${formatProviderDisplay(status.provider)}`,
       `${t(lang, 'currentModel')}: ${status.model || '-'}`,
-      `${t(lang, 'availableModels')} (${targetProvider}):`,
+      `${t(lang, 'availableModels')} (${formatProviderDisplay(targetProvider)}):`,
       ...models.map(item => `- ${item}`)
     ];
     outputText(lines.join('\n'), options);
@@ -279,7 +333,7 @@ async function handleSlashCommand(input, agent, state, options) {
     const lang = status.language;
     if (args.length === 0) {
       const lines = [
-        `${t(lang, 'currentProvider')}: ${status.provider}`,
+        `${t(lang, 'currentProvider')}: ${formatProviderDisplay(status.provider)}`,
         `${t(lang, 'currentModel')}: ${status.model || '-'}`,
         `${t(lang, 'usage')}:`,
         '/models [provider]',
@@ -289,15 +343,18 @@ async function handleSlashCommand(input, agent, state, options) {
       outputText(lines.join('\n'), options);
       return { handled: true, agent };
     }
-    const providerList = ['deepseek', 'glm', 'kimi'];
+    const providerList = ['deepseek', 'glm', 'kimi', 'chatglm'];
     const first = args[0].toLowerCase();
     let nextProvider = status.provider;
     let nextModel = null;
     if (providerList.includes(first)) {
-      nextProvider = first;
+      nextProvider = normalizeProvider(first);
       nextModel = args[1] || null;
     } else {
       nextModel = args[0];
+    }
+    if (nextProvider === 'glm' && nextModel) {
+      nextModel = normalizeGlmModel(nextModel);
     }
     const available = getAvailableModels(nextProvider);
     const resolvedModel = nextModel || available[0] || '';
@@ -320,7 +377,7 @@ async function handleSlashCommand(input, agent, state, options) {
     const updated = formatModelStatus(state.config);
     const updatedLang = updated.language;
     const lines = [
-      `${t(updatedLang, 'switchedProvider')}: ${updated.provider}`,
+      `${t(updatedLang, 'switchedProvider')}: ${formatProviderDisplay(updated.provider)}`,
       `${t(updatedLang, 'switchedModel')}: ${updated.model || '-'}`,
       `${t(updatedLang, 'apiUrl')}: ${updated.apiUrl || '-'}`
     ];
