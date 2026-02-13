@@ -334,11 +334,10 @@ async function handleSlashCommand(input, agent, state, options) {
     if (args.length === 0) {
       const lines = [
         `${t(lang, 'langCurrent')}: ${langDisplay}`,
-        `${t(lang, 'langUsage')}:`,
-        '/lang en',
-        '/lang zh',
-        `${t(lang, 'langOptions')}: en | zh (en | 汉)`,
-        t(lang, 'langInputHint')
+        'Available language:',
+        '1, /lang en',
+        '2, /lang 汉',
+        'Choose 1 or 2'
       ];
       outputText(lines.join('\n'), options);
       state.awaitingLanguage = true;
