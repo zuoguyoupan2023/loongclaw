@@ -134,10 +134,16 @@ class Agent {
         this.tools.toAPIFormat()
       );
       
-      // 处理工具调用
-      if (response.tool_calls && response.tool_calls.length > 0) {
+      let toolCalls = this._normalizeToolCalls(response.tool_calls || []);
+      if (toolCalls.length === 0) {
+        const dsmlCalls = this._extractDSMLToolCalls(response.content || '');
+        if (dsmlCalls.length > 0) {
+          toolCalls = this._normalizeToolCalls(dsmlCalls);
+          response.content = this._stripDSML(response.content || '');
+        }
+      }
+      if (toolCalls.length > 0) {
         const toolResults = [];
-        const toolCalls = this._normalizeToolCalls(response.tool_calls);
         
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function.name;
@@ -224,13 +230,25 @@ class Agent {
         ...context,
         { role: 'user', content: message }
       ],
-      onChunk,
+      (chunk) => {
+        const sanitized = this._sanitizeStreamChunk(chunk);
+        if (sanitized) {
+          onChunk(sanitized);
+        }
+      },
       this.tools.toAPIFormat()
     );
     
-    if (response.tool_calls && response.tool_calls.length > 0) {
+    let toolCalls = this._normalizeToolCalls(response.tool_calls || []);
+    if (toolCalls.length === 0) {
+      const dsmlCalls = this._extractDSMLToolCalls(response.content || '');
+      if (dsmlCalls.length > 0) {
+        toolCalls = this._normalizeToolCalls(dsmlCalls);
+        response.content = this._stripDSML(response.content || '');
+      }
+    }
+    if (toolCalls.length > 0) {
       const toolResults = [];
-      const toolCalls = this._normalizeToolCalls(response.tool_calls);
       
       for (const toolCall of toolCalls) {
         const toolName = toolCall.function.name;
@@ -270,7 +288,10 @@ class Agent {
       });
       
       if (finalResponse.content) {
-        onChunk(finalResponse.content);
+        const sanitized = this._stripDSML(finalResponse.content || '');
+        if (sanitized) {
+          onChunk(sanitized);
+        }
       }
       
       return finalResponse.content;
@@ -339,6 +360,61 @@ class Agent {
         }
       };
     });
+  }
+
+  _extractDSMLToolCalls(content) {
+    if (!content || typeof content !== 'string') {
+      return [];
+    }
+    const result = [];
+    const invokeTag = '<｜DSML｜invoke';
+    let pos = content.indexOf(invokeTag);
+    let index = 0;
+    while (pos !== -1) {
+      const nameMatch = content.slice(pos).match(/<｜DSML｜invoke\s+name="([^"]+)"[^>]*>/);
+      if (!nameMatch) break;
+      const name = nameMatch[1];
+      const after = content.slice(pos + nameMatch[0].length);
+      const nextPos = after.indexOf(invokeTag);
+      const block = nextPos !== -1 ? after.slice(0, nextPos) : after;
+      const params = {};
+      const paramRegex = /<｜DSML｜parameter\s+name="([^"]+)"[^>]*>([^\n<]*)/g;
+      let m;
+      while ((m = paramRegex.exec(block)) !== null) {
+        const key = m[1];
+        const valRaw = (m[2] || '').trim();
+        let val = valRaw;
+        if (/^(true|false)$/i.test(valRaw)) {
+          val = /^true$/i.test(valRaw);
+        } else if (/^-?\d+(\.\d+)?$/.test(valRaw)) {
+          val = Number(valRaw);
+        }
+        params[key] = val;
+      }
+      result.push({
+        type: 'function',
+        function: {
+          name,
+          arguments: JSON.stringify(params)
+        }
+      });
+      pos = nextPos === -1 ? -1 : pos + nameMatch[0].length + nextPos;
+      index += 1;
+    }
+    return result;
+  }
+
+  _stripDSML(text) {
+    if (!text || typeof text !== 'string') {
+      return text;
+    }
+    return text.replace(/<｜DSML｜[^>]*>/g, '');
+  }
+
+  _sanitizeStreamChunk(chunk) {
+    if (!chunk) return '';
+    if (typeof chunk !== 'string') return String(chunk);
+    return this._stripDSML(chunk);
   }
 
   /**
