@@ -89,13 +89,22 @@ class Agent {
     await this.memory.init();
     
     // 加载自定义系统提示（如果存在）
-    try {
-      const customPromptPath = './config/SOUL.md';
-      const customPrompt = await readFile(customPromptPath, 'utf-8');
-      this.systemPrompt = customPrompt;
-    } catch (e) {
-      // 使用默认提示
+    const promptParts = [this._buildSystemPrompt()];
+    const customPromptPaths = [
+      './config/SOUL.md',
+      './config/SYSTEM_PROMPTS..md'
+    ];
+    for (const customPromptPath of customPromptPaths) {
+      try {
+        const customPrompt = await readFile(customPromptPath, 'utf-8');
+        if (customPrompt && customPrompt.trim()) {
+          promptParts.push(customPrompt.trim());
+        }
+      } catch (e) {
+        continue;
+      }
     }
+    this.systemPrompt = promptParts.join('\n\n');
   }
 
   /**
@@ -508,6 +517,7 @@ class Agent {
     });
     
     const language = (this.config.system.language || 'zh').toLowerCase();
+    const workspaceRoot = `${process.cwd()}/workspace`;
     if (language === 'en') {
       const time = new Date().toLocaleString('en-US', {
         timeZone: this.config.system.timezone,
@@ -536,6 +546,11 @@ ${this.tools.getAll().map(t => `- ${t.name}: ${t.description}`).join('\n')}
 - Short-term memory: current session context
 - Long-term memory: persisted important information
 
+**Workspace**:
+- Root: ${workspaceRoot}
+- All file paths are relative to the workspace root
+- When reporting absolute paths, always include the workspace root
+
 **Notes**:
 - Protect privacy, never leak sensitive info
 - Be cautious before external actions
@@ -560,6 +575,11 @@ ${this.tools.getAll().map(t => `- ${t.name}: ${t.description}`).join('\n')}
 **记忆系统**:
 - 短期记忆: 当前会话上下文
 - 长期记忆: 持久化的重要信息
+
+**工作区**:
+- 根目录: ${workspaceRoot}
+- 所有文件路径都以工作区为根
+- 输出绝对路径时必须包含工作区根目录
 
 **注意事项**:
 - 保护隐私，不泄露敏感信息
